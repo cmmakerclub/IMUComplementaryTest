@@ -126,6 +126,14 @@ void readIMUSensor(float *Angle_Filtered) {
 
 
 void calibrateIMU() {
+  //  CurieImu.setGyroRate(BMI160_GYRO_RATE_100HZ);
+  //  CurieImu.setFullScaleGyroRange(BMI160_GYRO_RANGE_2000);
+
+  CurieIMU.setFullScaleAccelRange(BMI160_ACCEL_RANGE_2G);
+  CurieIMU.setFullScaleGyroRange(BMI160_GYRO_RANGE_2000);
+  CurieIMU.setGyroRate(BMI160_GYRO_RATE_3200HZ);
+  //  CurieImu.setGyroDLPFMode(BMI160_DLPF_MODE_NORM);
+
   //  calibrateGyro();
   // verify connection
   Serial.println("Testing device connections...");
