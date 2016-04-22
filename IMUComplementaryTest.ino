@@ -1,16 +1,21 @@
-#include "CurieIMU.h"
 
-int ax, ay, az;         // accelerometer values
-int gx, gy, gz;         // gyrometer values
+#include <Wire.h>
+#include <SPI.h>
+#include <SparkFunLSM9DS1.h>
 
-const int ledPin = 13;      // activity LED pin
 boolean blinkState = false; // state of the LED
+LSM9DS1 imu;
 
-int calibrateOffsets = 1; // int to determine whether calibration takes place or not
-
+///////////////////////
+// Example I2C Setup //
+///////////////////////
+// SDO_XM and SDO_G are both pulled high, so our addresses are:
+#define LSM9DS1_M  0x1C // Would be 0x1C if SDO_M is LOW
+#define LSM9DS1_AG  0x6A // Would be 0x6A if SDO_AG is LOW
 
 //#define ACCELEROMETER_SENSITIVITY 8192.0
 #define GYROSCOPE_SENSITIVITY 16.348
+//2^16/(2000*2)
 
 #define M_PI 3.14159265359
 #define dt (10.0/1000.0)             // 100hz = 10ms
@@ -76,11 +81,10 @@ void setup() {
 
   // initialize device
   Serial.println("Initializing IMU device...");
-  CurieIMU.begin();
   calibrateIMU();
 
   // configure Arduino LED for activity indicator
-  pinMode(ledPin, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void loop() {
@@ -104,7 +108,7 @@ void loop() {
       analogWrite(ENB, 0);  // Stop the wheels
     }
     blinkState = !blinkState;
-    digitalWrite(ledPin, blinkState);
+    digitalWrite(LED_BUILTIN, blinkState);
   }
 
 }
@@ -116,7 +120,7 @@ void readIMUSensor(float *Angle_Filtered) {
   int accData[3];
   int gyrData[3];
   //  CurieIMU.readMotionSensor(ax, ay, az, gx, gy, gz);
-  CurieIMU.readMotionSensor(accData[0], accData[1], accData[2], gyrData[0], gyrData[1], gyrData[2]);
+//  CurieIMU.readMotionSensor(accData[0], accData[1], accData[2], gyrData[0], gyrData[1], gyrData[2]);
   ComplementaryFilter(accData, gyrData, &pitch, &roll);
 
   *Angle_Filtered = pitch;
@@ -126,65 +130,73 @@ void readIMUSensor(float *Angle_Filtered) {
 
 
 void calibrateIMU() {
-  //  calibrateGyro();
-  // verify connection
-  Serial.println("Testing device connections...");
-  if (CurieIMU.begin()) {
-    Serial.println("CurieIMU connection successful");
-  } else {
-    Serial.println("CurieIMU connection failed");
+  // Before initializing the IMU, there are a few settings
+  // we may need to adjust. Use the settings struct to set
+  // the device's communication mode and addresses:
+
+  imu.settings.device.commInterface = IMU_MODE_I2C;
+  imu.settings.device.mAddress = LSM9DS1_M;
+  imu.settings.device.agAddress = LSM9DS1_AG;
+
+  imu.settings.mag.enabled = false; // Enable magnetometer
+
+  imu.settings.accel.scale = A_SCALE_2G;
+  imu.settings.accel.sampleRate = 1;
+
+  // [enabled] turns the acclerometer on or off.
+  imu.settings.accel.enabled = true; // Enable accelerometer
+  // [enableX], [enableY], and [enableZ] can turn on or off
+  // select axes of the acclerometer.
+  imu.settings.accel.enableX = true; // Enable X
+  imu.settings.accel.enableY = true; // Enable Y
+  imu.settings.accel.enableZ = true; // Enable Z
+
+//  imu.settings.accel.bandwidth = 0; // BW = 408Hz
+  // [highResEnable] enables or disables high resolution
+  // mode for the acclerometer.
+  imu.settings.accel.highResEnable = false; // Disable HR
+  // [highResBandwidth] sets the LP cutoff frequency of
+  // the accelerometer if it's in high-res mode.
+  // can be any value between 0-3
+  // LP cutoff is set to a factor of sample rate
+  // 0 = ODR/50    2 = ODR/9
+  // 1 = ODR/100   3 = ODR/400
+  imu.settings.accel.highResBandwidth = 1;
+  imu.settings.gyro.scale = G_SCALE_2000DPS;
+  imu.settings.gyro.sampleRate = 4;
+
+  imu.settings.gyro.bandwidth = 0;
+  // [lowPowerEnable] turns low-power mode on or off.
+  imu.settings.gyro.lowPowerEnable = false; // LP mode off
+  // [HPFEnable] enables or disables the high-pass filter
+  imu.settings.gyro.HPFEnable = false; // HPF disabled
+  // [HPFCutoff] sets the HPF cutoff frequency (if enabled)
+  // Allowable values are 0-9. Value depends on ODR.
+  // (Datasheet section 7.14)
+  imu.settings.gyro.HPFCutoff = 1; // HPF cutoff = 4Hz
+
+  imu.settings.gyro.flipX = false; // Don't flip X
+  imu.settings.gyro.flipY = false; // Don't flip Y
+  imu.settings.gyro.flipZ = false; // Don't flip Z
+
+  Serial.println("START IMU");
+  if (!imu.begin())
+  {
+    Serial.println("Failed to communicate with LSM9DS1.");
+    Serial.println("Double-check wiring.");
+    Serial.println("Default settings in this sketch will " \
+                   "work for an out of the box LSM9DS1 " \
+                   "Breakout, but may need to be modified " \
+                   "if the board jumpers are.");
+    while (1)
+      ;
   }
+  Serial.println("FINISHED");
 
-  // use the code below to calibrate accel/gyro offset values
-  if (calibrateOffsets == 1) {
-    Serial.println("Internal sensor offsets BEFORE calibration...");
-    Serial.print(CurieIMU.getAccelerometerOffset(X_AXIS));
-    Serial.print("\t"); // -76
-    Serial.print(CurieIMU.getAccelerometerOffset(Y_AXIS));
-    Serial.print("\t"); // -235
-    Serial.print(CurieIMU.getAccelerometerOffset(Z_AXIS));
-    Serial.print("\t"); // 168
-    Serial.print(CurieIMU.getGyroOffset(X_AXIS));
-    Serial.print("\t"); // 0
-    Serial.print(CurieIMU.getGyroOffset(Y_AXIS));
-    Serial.print("\t"); // 0
-    Serial.println(CurieIMU.getGyroOffset(Z_AXIS));
-
-    // To manually configure offset compensation values,
-    // use the following methods instead of the autoCalibrate...() methods below
-    //CurieIMU.setAccelerometerOffset(X_AXIS,128);
-    //CurieIMU.setAccelerometerOffset(Y_AXIS,-4);
-    //CurieIMU.setAccelerometerOffset(Z_AXIS,127);
-    //CurieIMU.setGyroOffset(X_AXIS,129);
-    //CurieIMU.setGyroOffset(Y_AXIS,-1);
-    //CurieIMU.setGyroOffset(Z_AXIS, 254);
-
-    Serial.println("About to calibrate. Make sure your board is stable and upright");
-    delay(5000);
-
-    // The board must be resting in a horizontal position for
-    // the following calibration procedure to work correctly!
-    Serial.print("Starting Gyroscope calibration and enabling offset compensation...");
-    CurieIMU.autoCalibrateGyroOffset();
-    Serial.println(" Done");
-
-    Serial.print("Starting Acceleration calibration and enabling offset compensation...");
-    CurieIMU.autoCalibrateAccelerometerOffset(X_AXIS, 0);
-    CurieIMU.autoCalibrateAccelerometerOffset(Y_AXIS, 0);
-    CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);
-    Serial.println(" Done");
-
-    Serial.println("Internal sensor offsets AFTER calibration...");
-    Serial.print(CurieIMU.getAccelerometerOffset(X_AXIS));
-    Serial.print("\t"); // -76
-    Serial.print(CurieIMU.getAccelerometerOffset(Y_AXIS));
-    Serial.print("\t"); // -2359
-    Serial.print(CurieIMU.getAccelerometerOffset(Z_AXIS));
-    Serial.print("\t"); // 1688
-    Serial.print(CurieIMU.getGyroOffset(X_AXIS));
-    Serial.print("\t"); // 0
-    Serial.print(CurieIMU.getGyroOffset(Y_AXIS));
-    Serial.print("\t"); // 0
-    Serial.println(CurieIMU.getGyroOffset(Z_AXIS));
-  }
+  // the following calibration procedure to work correctly!
+  Serial.print("Starting Gyroscope calibration...");
+  digitalWrite(LED_BUILTIN, HIGH);
+  imu.calibrate();
+  imu.calibrate(true);
+  digitalWrite(LED_BUILTIN, LOW);
 }
