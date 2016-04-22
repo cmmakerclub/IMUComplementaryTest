@@ -65,7 +65,7 @@ static void ComplementaryFilter(int accData[3], int gyrData[3], float *pitch, fl
   {
     // Turning around the X axis results in a vector on the Y-axis
     pitchAcc = atan2f((float)accData[1], (float)accData[2]) * 180 / M_PI;
-    *pitch = *pitch * 0.98 + pitchAcc * 0.02;
+    *pitch = *pitch * 0.8 + pitchAcc * 0.2;
 
     // Turning around the Y axis results in a vector on the X-axis
     rollAcc = atan2f((float)accData[0], (float)accData[2]) * 180 / M_PI;
@@ -121,6 +121,17 @@ void readIMUSensor(float *Angle_Filtered) {
   int gyrData[3];
   //  CurieIMU.readMotionSensor(ax, ay, az, gx, gy, gz);
 //  CurieIMU.readMotionSensor(accData[0], accData[1], accData[2], gyrData[0], gyrData[1], gyrData[2]);
+  imu.readAccel();
+  imu.readGyro();
+
+  accData[0] = (imu.ax);
+  accData[1] = (imu.ay);
+  accData[2] = (imu.az);
+
+  gyrData[0] =(imu.gx);
+  gyrData[1] =(imu.gy);
+  gyrData[2] =(imu.gz);
+
   ComplementaryFilter(accData, gyrData, &pitch, &roll);
 
   *Angle_Filtered = pitch;
